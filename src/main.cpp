@@ -2,6 +2,7 @@
 #include <string>
 #include <sstream>
 #include <unordered_map>
+#include <functional>
 using namespace std;
 
 using BuiltIn = function<void(const string& args)>;
