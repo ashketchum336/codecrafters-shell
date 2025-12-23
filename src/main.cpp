@@ -6,10 +6,12 @@
 #include <cstdlib>
 #include <filesystem>
 #include <sys/stat.h>
+#include<sys/wait.h>
 #include <optional>
+#include <unistd.h>
 using namespace std;
 
-using BuiltIn = function<void(const string& args)>;
+using BuiltIn = function<void(const vector<string>& args)>;
 unordered_map<string, BuiltIn> builtIns;
 
 bool isExecutable(const string& path)
@@ -44,43 +46,90 @@ optional<string> findExecutablePath(const string& command)
 struct ParsedCommand
 {
   string name;
-  string args;
+  vector<string> args;
 };
 
 ParsedCommand parse(const string& input)
 {
   istringstream iss(input);
   ParsedCommand cmd;
-  iss >> cmd.name;
-  iss >> std::ws;
-  getline(iss, cmd.args);
+  string token;
+
+  while (iss >> token) {
+    if (cmd.name.empty())
+      cmd.name = token;
+    cmd.args.push_back(token);
+  }
+
   return cmd;
+}
+
+void runExternal(const ParsedCommand& cmd)
+{
+  auto pathOpt = findExecutablePath(cmd.name);
+  if (!pathOpt.has_value()) {
+    cout << cmd.name << ": command not found" << endl;
+    return;
+  }
+
+  pid_t pid = fork();
+
+  if (pid == 0) {
+    // Child process
+
+    vector<char*> argv;
+    for (const auto& arg : cmd.args)
+      argv.push_back(const_cast<char*>(arg.c_str()));
+    argv.push_back(nullptr);
+
+    execv(pathOpt->c_str(), argv.data());
+
+    // exec only returns on error
+    perror("execv");
+    exit(1);
+  }
+  else if (pid > 0) {
+    // Parent process
+    int status;
+    waitpid(pid, &status, 0);
+  }
+  else {
+    perror("fork");
+  }
 }
 
 void initBuiltIn()
 {
-  builtIns["echo"] = [](const string& args){
-      cout << args << endl;
+  builtIns["echo"] = [](const vector<string>& args){
+      for (size_t i = 1; i < args.size(); ++i) 
+      {
+        if (i > 1) cout << " ";
+        cout << args[i];
+      }
+      cout << endl;
   };
 
-  builtIns["exit"] = [](const string&){
+  builtIns["exit"] = [](const vector<string>&){
     exit(0);
   };
 
-  builtIns["type"] = [](const string& args){
-    if(builtIns.count(args))
+  builtIns["type"] = [](const vector<string>& args){
+    if (args.size() < 2) return;
+
+    const string& cmd = args[1];
+
+    if (builtIns.count(cmd)) 
     {
-      cout << args << " is a shell builtin" << endl;
+      cout << cmd << " is a shell builtin" << endl;
       return;
     }
-    
-    auto executable = findExecutablePath(args);
-    if(executable.has_value())
+
+    auto executable = findExecutablePath(cmd);
+    if (executable.has_value()) 
     {
-      cout << args << " is " << executable.value() << endl;
-    }else
-    {
-      cout << args << ": not found" << endl;
+      cout << cmd << " is " << executable.value() << endl;
+    } else {
+      cout << cmd << ": not found" << endl;
     }
   };
 }
@@ -106,9 +155,8 @@ int main() {
     if(builtIns.count(pCmd.name))
     {
       builtIns[pCmd.name](pCmd.args);
-    }else
-    {
-      cout << pCmd.name << ": command not found" << endl;
+    }else {
+      runExternal(pCmd);
     }
   }
   
