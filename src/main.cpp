@@ -1,13 +1,55 @@
 #include <iostream>
 #include <string>
 #include <sstream>
-
+#include <unordered_map>
 using namespace std;
+
+using BuiltIn = function<void(const string& args)>;
+unordered_map<string, BuiltIn> builtIns;
+
+struct ParsedCommand
+{
+  string name;
+  string args;
+};
+
+ParsedCommand parse(const string& input)
+{
+  istringstream iss(input);
+  ParsedCommand cmd;
+  iss >> cmd.name;
+  iss >> std::ws;
+  getline(iss, cmd.args);
+  return cmd;
+}
+
+void initBuiltIn()
+{
+  builtIns["echo"] = [](const string& args){
+      cout << args << endl;
+  };
+
+  builtIns["exit"] = [](const string&){
+    exit(0);
+  };
+
+  builtIns["type"] = [](const string& args){
+    if(builtIns.count(args))
+    {
+      cout << args << " is a shell builtin" << endl;
+    }else
+    {
+      cout << args << ": not found" << endl;
+    }
+  };
+}
 
 int main() {
   // Flush after every std::cout / std:cerr
   std::cout << std::unitbuf;
   std::cerr << std::unitbuf;
+
+  initBuiltIn();
 
   while(true)
   {
@@ -19,26 +61,14 @@ int main() {
       break;
     }
 
-    if(input == "exit")
+    ParsedCommand pCmd = parse(input);
+    if(builtIns.count(pCmd.name))
     {
-      exit(0);
-    }
-
-    istringstream iss(input);
-    string command;
-    iss >> command;
-
-    if(command == "echo")
+      builtIns[pCmd.name](pCmd.args);
+    }else
     {
-      iss >> std::ws;
-      string rest;
-      getline(iss, rest);
-      cout << rest << endl;
-      continue;
+      cout << pCmd.name << ": command not found" << endl;
     }
-      
-    
-    cout << input << ": command not found" << endl;
   }
   
 }
