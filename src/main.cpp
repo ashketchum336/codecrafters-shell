@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <sstream>
 
 using namespace std;
 
@@ -12,8 +13,7 @@ int main() {
   {
     cout << "$ ";
     string input;
-    getline(cin, input);
-    if(cin.eof())
+    if(!getline(cin, input))
     {
       cout << endl;
       break;
@@ -23,6 +23,20 @@ int main() {
     {
       exit(0);
     }
+
+    istringstream iss(input);
+    string command;
+    iss >> command;
+
+    if(command == "echo")
+    {
+      iss >> std::ws;
+      string rest;
+      getline(iss, rest);
+      cout << rest << endl;
+      continue;
+    }
+      
     
     cout << input << ": command not found" << endl;
   }
