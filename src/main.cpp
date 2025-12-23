@@ -18,6 +18,11 @@ int main() {
       cout << endl;
       break;
     }
+
+    if(input == "exit")
+    {
+      exit(0);
+    }
     
     cout << input << ": command not found" << endl;
   }
