@@ -61,8 +61,15 @@ ParsedCommand parse(const string& input)
   for(int i = 0; i < (int)input.size(); ++i)
   {
     char ch = input[i];
-
-    if(ch == '\'' && !inDoubleQuotes)
+    if(ch == '\\' && !inSingleQuotes && !inDoubleQuotes)
+    {
+      if(i < (int)input.size() - 1)
+      {
+        current.push_back(input[i + 1]);
+        i++;
+      }
+    }
+    else if(ch == '\'' && !inDoubleQuotes)
     {
       inSingleQuotes = !inSingleQuotes;
     }else if(ch == '"' && !inSingleQuotes)
