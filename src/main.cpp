@@ -152,9 +152,9 @@ void initBuiltIn()
 
     if(path == "~")
     {
-      const char* home = getenv("$HOME");
+      const char* home = getenv("HOME");
       if(!home) return;
-      
+
       path = home;
     }
 
