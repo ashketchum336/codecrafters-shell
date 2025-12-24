@@ -144,6 +144,18 @@ void initBuiltIn()
       perror("getcwd");
     }
   };
+
+  builtIns["cd"] = [](const vector<string>& args){
+    if((int)args.size() < 2) return;
+
+    const string& path = args[1];
+    if(path.empty() || path[0] != '/') return;
+
+    if(chdir(path.c_str()) != 0)
+    {
+      cout << "cd: " << path << ": No such file or directory" << endl;
+    }
+  };
 }
 
 int main() {
