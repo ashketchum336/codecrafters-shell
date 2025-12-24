@@ -153,11 +153,8 @@ void initBuiltIn()
     if(path == "~")
     {
       const char* home = getenv("$HOME");
-      if(!home)
-      {
-        cout << "cd: HOME not set" << endl;
-        return;
-      }
+      if(!home) return;
+      
       path = home;
     }
 
