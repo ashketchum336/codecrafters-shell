@@ -6,9 +6,10 @@
 #include <cstdlib>
 #include <filesystem>
 #include <sys/stat.h>
-#include<sys/wait.h>
+#include <sys/wait.h>
 #include <optional>
 #include <unistd.h>
+#include <limits.h>
 using namespace std;
 
 using BuiltIn = function<void(const vector<string>& args)>;
@@ -130,6 +131,17 @@ void initBuiltIn()
       cout << cmd << " is " << executable.value() << endl;
     } else {
       cout << cmd << ": not found" << endl;
+    }
+  };
+
+  builtIns["pwd"] = [](const vector<string>&){
+    char cwd[PATH_MAX];
+    if(getcwd(cwd, sizeof cwd) != nullptr)
+    {
+      cout << cwd << endl;
+    }else
+    {
+      perror("getcwd");
     }
   };
 }
