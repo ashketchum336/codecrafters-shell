@@ -148,7 +148,18 @@ void initBuiltIn()
   builtIns["cd"] = [](const vector<string>& args){
     if((int)args.size() < 2) return;
 
-    const string& path = args[1];
+    string path = args[1];
+
+    if(path == "~")
+    {
+      const char* home = getenv("$HOME");
+      if(!home)
+      {
+        cout << "cd: HOME not set" << endl;
+        return;
+      }
+      path = home;
+    }
 
     if(chdir(path.c_str()) != 0)
     {
