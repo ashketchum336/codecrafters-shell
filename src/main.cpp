@@ -68,6 +68,20 @@ ParsedCommand parse(const string& input)
         current.push_back(input[i + 1]);
         i++;
       }
+    }else if(ch == '\\' && inDoubleQuotes)
+    {
+      if(i < (int)input.size() - 1)
+      {
+        char next = input [i + 1];
+        if(next == '"' || next == '\\')
+        {
+          current.push_back(next);
+          i++;
+        }else
+        {
+          current.push_back(ch);
+        }
+      }
     }
     else if(ch == '\'' && !inDoubleQuotes)
     {
