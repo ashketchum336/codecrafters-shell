@@ -52,16 +52,40 @@ struct ParsedCommand
 
 ParsedCommand parse(const string& input)
 {
-  istringstream iss(input);
   ParsedCommand cmd;
-  string token;
+  vector<string> args;
 
-  while (iss >> token) {
-    if (cmd.name.empty())
-      cmd.name = token;
-    cmd.args.push_back(token);
+  string current;
+  bool inSingleQuotes = false;
+  for(int i = 0; i < (int)input.size(); ++i)
+  {
+    char ch = input[i];
+
+    if(ch == '\'')
+    {
+      inSingleQuotes = !inSingleQuotes;
+    }else if(isspace(ch) && !inSingleQuotes)
+    {
+      if(!current.empty())
+      {
+        args.push_back(current);
+        current.clear();
+      }
+    }else{
+      current.push_back(ch);
+    }
   }
 
+  if(!current.empty())
+  {
+    args.push_back(current);
+  }
+  
+  if(!args.empty())
+  {
+    cmd.name = args[0];
+    cmd.args = args;
+  }
   return cmd;
 }
 
