@@ -30,7 +30,7 @@ char* builtin_generator(const char* text, int state) {
         for (const auto& [name, _] : builtIns) {
             if (name == "echo" || name == "exit") {
                 if (name.rfind(text, 0) == 0) { // prefix match
-                    matches.push_back(name + " ");
+                    matches.push_back(name);
                 }
             }
         }
