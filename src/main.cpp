@@ -68,6 +68,28 @@ void restoreStdout(int savedStdout)
   close(savedStdout);
 }
 
+int redirectFdToFile(int targetFd, const string& filename)
+{
+  int fd = open(filename.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  if (fd < 0)
+  {
+    perror("open");
+    return -1;
+  }
+
+  int savedFd = dup(targetFd);
+  dup2(fd, targetFd);
+  close(fd);
+
+  return savedFd;
+}
+
+void restoreFd(int targetFd, int savedFd)
+{
+  dup2(savedFd, targetFd);
+  close(savedFd);
+}
+
 struct ParsedCommand
 {
   string name;
@@ -75,6 +97,9 @@ struct ParsedCommand
 
   bool redirectStdOut = false;
   string stdOutFile;
+
+  bool redirectStderr = false;
+  string stderrFile;
 };
 
 ParsedCommand parse(const string& input)
@@ -145,6 +170,14 @@ ParsedCommand parse(const string& input)
         cmd.stdOutFile = args[i + 1];
         i++;
       }
+    }else if(args[i] == "2>")
+    {
+      if(i < (int)args.size() - 1)
+      {
+        cmd.redirectStderr = true;
+        cmd.stdOutFile = args[i + 1];
+        i++;
+      }
     }else
     {
       finalArgs.push_back(args[i]);
@@ -187,6 +220,15 @@ void runExternal(const ParsedCommand& cmd)
       }
 
       dup2(fd, STDOUT_FILENO);
+      close(fd);
+    }
+
+    if (cmd.redirectStderr)
+    {
+      int fd = open(cmd.stderrFile.c_str(),
+                    O_WRONLY | O_CREAT | O_TRUNC, 0644);
+      if (fd < 0) { perror("open"); exit(1); }
+      dup2(fd, STDERR_FILENO);
       close(fd);
     }
 
@@ -298,6 +340,7 @@ int main() {
     if(builtIns.count(pCmd.name))
     {
       int savedStdout = -1;
+      int savedStderr = -1;
 
       if (pCmd.redirectStdOut)
       {
@@ -305,11 +348,21 @@ int main() {
         if (savedStdout < 0) continue;
       }
 
+      if (pCmd.redirectStderr)
+      {
+        savedStderr = redirectFdToFile(STDERR_FILENO, pCmd.stderrFile);
+      }
+
       builtIns[pCmd.name](pCmd.args);
 
       if (pCmd.redirectStdOut)
       {
         restoreStdout(savedStdout);
+      }
+
+      if (pCmd.redirectStderr)
+      {
+        restoreFd(STDERR_FILENO, savedStderr);
       }
     }else {
       runExternal(pCmd);
