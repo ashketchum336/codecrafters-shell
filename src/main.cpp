@@ -13,9 +13,23 @@
 #include <fcntl.h>
 
 using namespace std;
+namespace fs = std::filesystem;
 
 using BuiltIn = function<void(const vector<string>& args)>;
 unordered_map<string, BuiltIn> builtIns;
+
+bool ensureParentDirExists(const string& filepath)
+{
+  fs::path p(filepath);
+  fs::path parent = p.parent_path();
+
+  if (parent.empty())
+    return true;
+
+  error_code ec;
+  fs::create_directories(parent, ec);
+  return !ec;
+}
 
 bool isExecutable(const string& path)
 {
@@ -48,6 +62,7 @@ optional<string> findExecutablePath(const string& command)
 
 int redirectStdoutToFile(const string& filename)
 {
+  ensureParentDirExists(filename);
   int fd = open(filename.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
   if (fd < 0)
   {
@@ -70,6 +85,7 @@ void restoreStdout(int savedStdout)
 
 int redirectFdToFile(int targetFd, const string& filename)
 {
+  ensureParentDirExists(filename);
   int fd = open(filename.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
   if (fd < 0)
   {
