@@ -19,6 +19,43 @@ using namespace std;
 using BuiltIn = function<void(const vector<string>& args)>;
 unordered_map<string, BuiltIn> builtIns;
 
+bool isExecutable(const string& path)
+{
+  struct stat sb;
+  if(stat(path.c_str(), &sb) != 0) return false;
+  return sb.st_mode & S_IXUSR;
+}
+
+vector<string> executablesInPath() {
+    vector<string> result;
+
+    const char* pathEnv = getenv("PATH");
+    if (!pathEnv) return result;
+
+    string pathStr(pathEnv);
+    stringstream ss(pathStr);
+    string dir;
+
+    while (getline(ss, dir, ':')) {
+        if (dir.empty()) continue;
+
+        // PATH entries may not exist — must handle gracefully
+        if (!filesystem::exists(dir) || !filesystem::is_directory(dir))
+            continue;
+
+        for (const auto& entry : filesystem::directory_iterator(dir)) {
+            if (!entry.is_regular_file()) continue;
+
+            const auto& path = entry.path();
+            if (isExecutable(path.string())) {
+                result.push_back(path.filename().string());
+            }
+        }
+    }
+
+    return result;
+}
+
 char* command_generator(const char* text, int state) {
     static vector<string> matches;
     static size_t index;
@@ -58,43 +95,6 @@ char** completion_hook(const char* text, int start, int end) {
     if (start != 0) return nullptr;
 
     return rl_completion_matches(text, command_generator);
-}
-
-bool isExecutable(const string& path)
-{
-  struct stat sb;
-  if(stat(path.c_str(), &sb) != 0) return false;
-  return sb.st_mode & S_IXUSR;
-}
-
-vector<string> executablesInPath() {
-    vector<string> result;
-
-    const char* pathEnv = getenv("PATH");
-    if (!pathEnv) return result;
-
-    string pathStr(pathEnv);
-    stringstream ss(pathStr);
-    string dir;
-
-    while (getline(ss, dir, ':')) {
-        if (dir.empty()) continue;
-
-        // PATH entries may not exist — must handle gracefully
-        if (!filesystem::exists(dir) || !filesystem::is_directory(dir))
-            continue;
-
-        for (const auto& entry : filesystem::directory_iterator(dir)) {
-            if (!entry.is_regular_file()) continue;
-
-            const auto& path = entry.path();
-            if (isExecutable(path.string())) {
-                result.push_back(path.filename().string());
-            }
-        }
-    }
-
-    return result;
 }
 
 optional<string> findExecutablePath(const string& command)
