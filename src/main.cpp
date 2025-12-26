@@ -19,7 +19,7 @@ using namespace std;
 using BuiltIn = function<void(const vector<string>& args)>;
 unordered_map<string, BuiltIn> builtIns;
 
-char* builtin_generator(const char* text, int state) {
+char* command_generator(const char* text, int state) {
     static vector<string> matches;
     static size_t index;
 
@@ -27,11 +27,21 @@ char* builtin_generator(const char* text, int state) {
         matches.clear();
         index = 0;
 
+        string prefix(text);
+
+        // 1️⃣ Builtins
         for (const auto& [name, _] : builtIns) {
             if (name == "echo" || name == "exit") {
-                if (name.rfind(text, 0) == 0) { // prefix match
+                if (name.rfind(prefix, 0) == 0) {
                     matches.push_back(name);
                 }
+            }
+        }
+
+        // 2️⃣ External executables
+        for (const auto& exe : executablesInPath()) {
+            if (exe.rfind(prefix, 0) == 0) {
+                matches.push_back(exe);
             }
         }
     }
@@ -47,7 +57,7 @@ char** completion_hook(const char* text, int start, int end) {
     // Only autocomplete the first word
     if (start != 0) return nullptr;
 
-    return rl_completion_matches(text, builtin_generator);
+    return rl_completion_matches(text, command_generator);
 }
 
 bool isExecutable(const string& path)
@@ -55,6 +65,36 @@ bool isExecutable(const string& path)
   struct stat sb;
   if(stat(path.c_str(), &sb) != 0) return false;
   return sb.st_mode & S_IXUSR;
+}
+
+vector<string> executablesInPath() {
+    vector<string> result;
+
+    const char* pathEnv = getenv("PATH");
+    if (!pathEnv) return result;
+
+    string pathStr(pathEnv);
+    stringstream ss(pathStr);
+    string dir;
+
+    while (getline(ss, dir, ':')) {
+        if (dir.empty()) continue;
+
+        // PATH entries may not exist — must handle gracefully
+        if (!filesystem::exists(dir) || !filesystem::is_directory(dir))
+            continue;
+
+        for (const auto& entry : filesystem::directory_iterator(dir)) {
+            if (!entry.is_regular_file()) continue;
+
+            const auto& path = entry.path();
+            if (isExecutable(path.string())) {
+                result.push_back(path.filename().string());
+            }
+        }
+    }
+
+    return result;
 }
 
 optional<string> findExecutablePath(const string& command)
