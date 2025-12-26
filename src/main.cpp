@@ -46,6 +46,28 @@ optional<string> findExecutablePath(const string& command)
   return nullopt;
 }
 
+int redirectStdoutToFile(const string& filename)
+{
+  int fd = open(filename.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  if (fd < 0)
+  {
+    perror("open");
+    return -1;
+  }
+
+  int savedStdout = dup(STDOUT_FILENO);
+  dup2(fd, STDOUT_FILENO);
+  close(fd);
+
+  return savedStdout;
+}
+
+void restoreStdout(int savedStdout)
+{
+  dup2(savedStdout, STDOUT_FILENO);
+  close(savedStdout);
+}
+
 struct ParsedCommand
 {
   string name;
@@ -275,7 +297,20 @@ int main() {
     ParsedCommand pCmd = parse(input);
     if(builtIns.count(pCmd.name))
     {
+      int savedStdout = -1;
+
+      if (pCmd.redirectStdOut)
+      {
+        savedStdout = redirectStdoutToFile(pCmd.stdOutFile);
+        if (savedStdout < 0) continue;
+      }
+
       builtIns[pCmd.name](pCmd.args);
+
+      if (pCmd.redirectStdOut)
+      {
+        restoreStdout(savedStdout);
+      }
     }else {
       runExternal(pCmd);
     }
