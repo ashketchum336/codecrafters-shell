@@ -11,11 +11,44 @@
 #include <unistd.h>
 #include <limits.h>
 #include <fcntl.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 
 using namespace std;
 
 using BuiltIn = function<void(const vector<string>& args)>;
 unordered_map<string, BuiltIn> builtIns;
+
+char* builtin_generator(const char* text, int state) {
+    static vector<string> matches;
+    static size_t index;
+
+    if (state == 0) {
+        matches.clear();
+        index = 0;
+
+        for (const auto& [name, _] : builtIns) {
+            if (name == "echo" || name == "exit") {
+                if (name.rfind(text, 0) == 0) { // prefix match
+                    matches.push_back(name + " ");
+                }
+            }
+        }
+    }
+
+    if (index < matches.size()) {
+        return strdup(matches[index++].c_str());
+    }
+
+    return nullptr;
+}
+
+char** completion_hook(const char* text, int start, int end) {
+    // Only autocomplete the first word
+    if (start != 0) return nullptr;
+
+    return rl_completion_matches(text, builtin_generator);
+}
 
 bool isExecutable(const string& path)
 {
@@ -312,15 +345,21 @@ int main() {
   std::cerr << std::unitbuf;
 
   initBuiltIn();
+  rl_attempted_completion_function = completion_hook;
 
   while(true)
   {
-    cout << "$ ";
-    string input;
-    if(!getline(cin, input))
-    {
+    char* line = readline("$ ");
+    if (!line) {
       cout << endl;
       break;
+    }
+
+    string input(line);
+    free(line);
+
+    if (!input.empty()) {
+      add_history(input.c_str());
     }
 
     ParsedCommand pCmd = parse(input);

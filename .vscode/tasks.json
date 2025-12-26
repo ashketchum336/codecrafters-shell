@@ -10,6 +10,9 @@
                 "-fansi-escape-codes",
                 "-g",
                 "${file}",
+                "-I/opt/homebrew/opt/readline/include",
+                "-L/opt/homebrew/opt/readline/lib",
+                "-lreadline",
                 "-o",
                 "${fileDirname}/${fileBasenameNoExtension}"
             ],
