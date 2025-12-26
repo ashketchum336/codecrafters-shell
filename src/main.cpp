@@ -10,6 +10,8 @@
 #include <optional>
 #include <unistd.h>
 #include <limits.h>
+#include <fcntl.h>
+
 using namespace std;
 
 using BuiltIn = function<void(const vector<string>& args)>;
@@ -48,6 +50,9 @@ struct ParsedCommand
 {
   string name;
   vector<string> args;
+
+  bool redirectStdOut = false;
+  string stdOutFile;
 };
 
 ParsedCommand parse(const string& input)
@@ -106,11 +111,28 @@ ParsedCommand parse(const string& input)
   {
     args.push_back(current);
   }
-  
-  if(!args.empty())
+
+  vector<string> finalArgs;
+  for(int i = 0; i < (int)args.size(); ++i)
   {
-    cmd.name = args[0];
-    cmd.args = args;
+    if(args[i] == ">" || args[i] == "1>")
+    {
+      if(i < (int)args.size() - 1)
+      {
+        cmd.redirectStdOut = true;
+        cmd.stdOutFile = args[i + 1];
+        i++;
+      }
+    }else
+    {
+      finalArgs.push_back(args[i]);
+    }
+  }
+  
+  if(!finalArgs.empty())
+  {
+    cmd.name = finalArgs[0];
+    cmd.args = finalArgs;
   }
   return cmd;
 }
@@ -127,6 +149,24 @@ void runExternal(const ParsedCommand& cmd)
 
   if (pid == 0) {
     // Child process
+
+    if (cmd.redirectStdOut)
+    {
+      int fd = open(
+        cmd.stdOutFile.c_str(),
+        O_WRONLY | O_CREAT | O_TRUNC,
+        0644
+      );
+
+      if (fd < 0)
+      {
+        perror("open");
+        exit(1);
+      }
+
+      dup2(fd, STDOUT_FILENO);
+      close(fd);
+    }
 
     vector<char*> argv;
     for (const auto& arg : cmd.args)
