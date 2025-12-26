@@ -46,60 +46,24 @@ optional<string> findExecutablePath(const string& command)
   return nullopt;
 }
 
-int redirectStdoutToFile(const string& filename)
-{
-  int fd = open(filename.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-  if (fd < 0)
-  {
-    perror("open");
-    return -1;
-  }
+enum class RedirectMode {
+  NONE,
+  TRUNCATE,  // >
+  APPEND     // >>
+};
 
-  int savedStdout = dup(STDOUT_FILENO);
-  dup2(fd, STDOUT_FILENO);
-  close(fd);
-
-  return savedStdout;
-}
-
-void restoreStdout(int savedStdout)
-{
-  dup2(savedStdout, STDOUT_FILENO);
-  close(savedStdout);
-}
-
-int redirectFdToFile(int targetFd, const string& filename)
-{
-  int fd = open(filename.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-  if (fd < 0)
-  {
-    perror("open");
-    return -1;
-  }
-
-  int savedFd = dup(targetFd);
-  dup2(fd, targetFd);
-  close(fd);
-
-  return savedFd;
-}
-
-void restoreFd(int targetFd, int savedFd)
-{
-  dup2(savedFd, targetFd);
-  close(savedFd);
-}
+struct FdRedirect {
+  RedirectMode mode = RedirectMode::NONE;
+  string file;
+};
 
 struct ParsedCommand
 {
   string name;
   vector<string> args;
 
-  bool redirectStdOut = false;
-  string stdOutFile;
-
-  bool redirectStderr = false;
-  string stderrFile;
+  FdRedirect stdoutRedirect;
+  FdRedirect stderrRedirect;
 };
 
 ParsedCommand parse(const string& input)
@@ -166,19 +130,33 @@ ParsedCommand parse(const string& input)
     {
       if(i < (int)args.size() - 1)
       {
-        cmd.redirectStdOut = true;
-        cmd.stdOutFile = args[i + 1];
+        cmd.stdoutRedirect = {RedirectMode::TRUNCATE, args[i + 1]};
         i++;
       }
-    }else if(args[i] == "2>")
+    }else if(args[i] == ">>" || args[i] == "1>>")
     {
       if(i < (int)args.size() - 1)
       {
-        cmd.redirectStderr = true;
-        cmd.stderrFile = args[i + 1];
+        cmd.stdoutRedirect = {RedirectMode::APPEND, args[i + 1]};
         i++;
       }
-    }else
+    }
+    else if(args[i] == "2>")
+    {
+      if(i < (int)args.size() - 1)
+      {
+        cmd.stderrRedirect = {RedirectMode::TRUNCATE, args[i + 1]};
+        i++;
+      }
+    }else if(args[i] == "2>>")
+    {
+      if(i < (int)args.size() - 1)
+      {
+        cmd.stderrRedirect = {RedirectMode::APPEND, args[i + 1]};
+        i++;
+      }
+    }
+    else
     {
       finalArgs.push_back(args[i]);
     }
@@ -190,6 +168,36 @@ ParsedCommand parse(const string& input)
     cmd.args = finalArgs;
   }
   return cmd;
+}
+
+int redirectFd(int targetFd, const FdRedirect& r)
+{
+  if (r.mode == RedirectMode::NONE) return -1;
+
+  int flags = O_WRONLY | O_CREAT;
+  if (r.mode == RedirectMode::TRUNCATE)
+    flags |= O_TRUNC;
+  else
+    flags |= O_APPEND;
+
+  int fd = open(r.file.c_str(), flags, 0644);
+  if (fd < 0) {
+    perror("open");
+    return -1;
+  }
+
+  int saved = dup(targetFd);
+  dup2(fd, targetFd);
+  close(fd);
+  return saved;
+}
+
+void restoreFd(int targetFd, int saved)
+{
+  if (saved >= 0) {
+    dup2(saved, targetFd);
+    close(saved);
+  }
 }
 
 void runExternal(const ParsedCommand& cmd)
@@ -205,32 +213,11 @@ void runExternal(const ParsedCommand& cmd)
   if (pid == 0) {
     // Child process
 
-    if (cmd.redirectStdOut)
-    {
-      int fd = open(
-        cmd.stdOutFile.c_str(),
-        O_WRONLY | O_CREAT | O_TRUNC,
-        0644
-      );
+    if (cmd.stdoutRedirect.mode != RedirectMode::NONE)
+      redirectFd(STDOUT_FILENO, cmd.stdoutRedirect);
 
-      if (fd < 0)
-      {
-        perror("open");
-        exit(1);
-      }
-
-      dup2(fd, STDOUT_FILENO);
-      close(fd);
-    }
-
-    if (cmd.redirectStderr)
-    {
-      int fd = open(cmd.stderrFile.c_str(),
-                    O_WRONLY | O_CREAT | O_TRUNC, 0644);
-      if (fd < 0) { perror("open"); exit(1); }
-      dup2(fd, STDERR_FILENO);
-      close(fd);
-    }
+    if (cmd.stderrRedirect.mode != RedirectMode::NONE)
+      redirectFd(STDERR_FILENO, cmd.stderrRedirect);
 
     vector<char*> argv;
     for (const auto& arg : cmd.args)
@@ -339,31 +326,13 @@ int main() {
     ParsedCommand pCmd = parse(input);
     if(builtIns.count(pCmd.name))
     {
-      int savedStdout = -1;
-      int savedStderr = -1;
-
-      if (pCmd.redirectStdOut)
-      {
-        savedStdout = redirectStdoutToFile(pCmd.stdOutFile);
-        if (savedStdout < 0) continue;
-      }
-
-      if (pCmd.redirectStderr)
-      {
-        savedStderr = redirectFdToFile(STDERR_FILENO, pCmd.stderrFile);
-      }
+      int savedOut = redirectFd(STDOUT_FILENO, pCmd.stdoutRedirect);
+      int savedErr = redirectFd(STDERR_FILENO, pCmd.stderrRedirect);
 
       builtIns[pCmd.name](pCmd.args);
 
-      if (pCmd.redirectStdOut)
-      {
-        restoreStdout(savedStdout);
-      }
-
-      if (pCmd.redirectStderr)
-      {
-        restoreFd(STDERR_FILENO, savedStderr);
-      }
+      restoreFd(STDOUT_FILENO, savedOut);
+      restoreFd(STDERR_FILENO, savedErr);
     }else {
       runExternal(pCmd);
     }
