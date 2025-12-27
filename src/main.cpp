@@ -313,6 +313,90 @@ void runExternal(const ParsedCommand& cmd)
   }
 }
 
+struct Pipeline {
+  ParsedCommand left;
+  ParsedCommand right;
+};
+
+optional<Pipeline> parsePipeline(const string& input) {
+  size_t pos = input.find('|');
+  if (pos == string::npos) return nullopt;
+
+  string left = input.substr(0, pos);
+  string right = input.substr(pos + 1);
+
+  Pipeline p;
+  p.left = parse(left);
+  p.right = parse(right);
+
+  return p;
+}
+
+void runPipeline(const ParsedCommand& left, const ParsedCommand& right) {
+  int pipefd[2];
+  if (pipe(pipefd) < 0) {
+    perror("pipe");
+    return;
+  }
+
+  // LEFT COMMAND
+  pid_t leftPid = fork();
+  if (leftPid == 0) {
+    // stdout → pipe write
+    dup2(pipefd[1], STDOUT_FILENO);
+
+    close(pipefd[0]);
+    close(pipefd[1]);
+
+    auto path = findExecutablePath(left.name);
+    if (!path) {
+      cerr << left.name << ": command not found\n";
+      exit(1);
+    }
+
+    vector<char*> argv;
+    for (auto& a : left.args)
+      argv.push_back(const_cast<char*>(a.c_str()));
+    argv.push_back(nullptr);
+
+    execv(path->c_str(), argv.data());
+    perror("execv");
+    exit(1);
+  }
+
+  // RIGHT COMMAND
+  pid_t rightPid = fork();
+  if (rightPid == 0) {
+    // stdin ← pipe read
+    dup2(pipefd[0], STDIN_FILENO);
+
+    close(pipefd[1]);
+    close(pipefd[0]);
+
+    auto path = findExecutablePath(right.name);
+    if (!path) {
+      cerr << right.name << ": command not found\n";
+      exit(1);
+    }
+
+    vector<char*> argv;
+    for (auto& a : right.args)
+      argv.push_back(const_cast<char*>(a.c_str()));
+    argv.push_back(nullptr);
+
+    execv(path->c_str(), argv.data());
+    perror("execv");
+    exit(1);
+  }
+
+  // Parent
+  close(pipefd[0]);
+  close(pipefd[1]);
+
+  waitpid(leftPid, nullptr, 0);
+  waitpid(rightPid, nullptr, 0);
+}
+
 void initBuiltIn()
 {
   builtIns["echo"] = [](const vector<string>& args){
@@ -402,6 +486,14 @@ int main() {
       add_history(input.c_str());
     }
 
+    // 1️⃣ First: check for pipeline
+    auto pipeline = parsePipeline(input);
+    if (pipeline) {
+      runPipeline(pipeline->left, pipeline->right);
+      continue;   // IMPORTANT: do not fall through
+    }
+
+    // 2️⃣ Otherwise: normal command execution
     ParsedCommand pCmd = parse(input);
     if(builtIns.count(pCmd.name))
     {
