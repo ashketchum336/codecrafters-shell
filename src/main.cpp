@@ -314,8 +314,7 @@ void runExternal(const ParsedCommand& cmd)
 }
 
 struct Pipeline {
-  ParsedCommand left;
-  ParsedCommand right;
+  vector<ParsedCommand> cmds;
 };
 
 optional<Pipeline> parsePipeline(const string& input) {
@@ -326,8 +325,12 @@ optional<Pipeline> parsePipeline(const string& input) {
   string right = input.substr(pos + 1);
 
   Pipeline p;
-  p.left = parse(left);
-  p.right = parse(right);
+  string token;
+  stringstream ss(input);
+
+  while (getline(ss, token, '|')) {
+    p.cmds.push_back(parse(token));
+  }
 
   return p;
 }
@@ -356,43 +359,57 @@ void execCommandInChild(const ParsedCommand& cmd) {
   exit(1);
 }
 
-void runPipeline(const ParsedCommand& left, const ParsedCommand& right) {
-  int pipefd[2];
-  if (pipe(pipefd) < 0) {
-    perror("pipe");
-    return;
+void runPipeline(const vector<ParsedCommand>& cmds) {
+  int n = cmds.size();
+  if (n < 2) return;
+
+  vector<array<int, 2>> pipes(n - 1);
+
+  // Create pipes
+  for (int i = 0; i < n - 1; ++i) {
+    if (pipe(pipes[i].data()) < 0) {
+      perror("pipe");
+      return;
+    }
   }
 
-  // LEFT COMMAND
-  pid_t leftPid = fork();
-  if (leftPid == 0) {
-    // stdout → pipe write
-    dup2(pipefd[1], STDOUT_FILENO);
+  vector<pid_t> pids;
 
-    close(pipefd[0]);
-    close(pipefd[1]);
+  for (int i = 0; i < n; ++i) {
+    pid_t pid = fork();
+    if (pid == 0) {
+      // stdin
+      if (i > 0) {
+        dup2(pipes[i - 1][0], STDIN_FILENO);
+      }
 
-    execCommandInChild(left);
+      // stdout
+      if (i < n - 1) {
+        dup2(pipes[i][1], STDOUT_FILENO);
+      }
+
+      // Close ALL pipe fds in child
+      for (auto& p : pipes) {
+        close(p[0]);
+        close(p[1]);
+      }
+
+      execCommandInChild(cmds[i]);
+    }
+
+    pids.push_back(pid);
   }
 
-  // RIGHT COMMAND
-  pid_t rightPid = fork();
-  if (rightPid == 0) {
-    // stdin ← pipe read
-    dup2(pipefd[0], STDIN_FILENO);
-
-    close(pipefd[1]);
-    close(pipefd[0]);
-
-    execCommandInChild(right);
+  // Parent closes all pipe fds
+  for (auto& p : pipes) {
+    close(p[0]);
+    close(p[1]);
   }
 
-  // Parent
-  close(pipefd[0]);
-  close(pipefd[1]);
-
-  waitpid(leftPid, nullptr, 0);
-  waitpid(rightPid, nullptr, 0);
+  // Wait for all children
+  for (pid_t pid : pids) {
+    waitpid(pid, nullptr, 0);
+  }
 }
 
 void initBuiltIn()
@@ -487,8 +504,8 @@ int main() {
     // 1️⃣ First: check for pipeline
     auto pipeline = parsePipeline(input);
     if (pipeline) {
-      runPipeline(pipeline->left, pipeline->right);
-      continue;   // IMPORTANT: do not fall through
+      runPipeline(pipeline->cmds);
+      continue;
     }
 
     // 2️⃣ Otherwise: normal command execution
