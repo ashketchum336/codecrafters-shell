@@ -428,6 +428,14 @@ void initBuiltIn()
   };
 
   builtIns["history"] = [](const vector<string>& args) {
+    // history -r <file>
+    if (args.size() == 3 && args[1] == "-r") {
+        if (read_history(args[2].c_str()) != 0) {
+            perror("history");
+        }
+        return;
+    }
+
     HIST_ENTRY** list = history_list();
     if (!list) return;
 
@@ -440,17 +448,15 @@ void initBuiltIn()
             n = stoi(args[1]);
             if (n < 0) n = 0;
         } catch (...) {
-            return; // invalid argument → silently ignore (matches shell behavior)
+            return;
         }
     }
 
     int start = max(0, total - n);
-
     for (int i = start; i < total; ++i) {
         cout << "    " << (i + 1) << "  " << list[i]->line << endl;
     }
   };
-
 
   builtIns["type"] = [](const vector<string>& args){
     if (args.size() < 2) return;
