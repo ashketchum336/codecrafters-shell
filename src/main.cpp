@@ -540,6 +540,12 @@ int main() {
   initBuiltIn();
   rl_attempted_completion_function = completion_hook;
 
+  // 🔹 Load history on startup if HISTFILE is set
+  const char* histfile = getenv("HISTFILE");
+  if (histfile && *histfile) {
+      read_history(histfile);
+  }
+
   while(true)
   {
     char* line = readline("$ ");
