@@ -436,6 +436,14 @@ void initBuiltIn()
         return;
     }
 
+    // history -w <file>
+    if (args.size() == 3 && args[1] == "-w") {
+        if (write_history(args[2].c_str()) != 0) {
+            perror("history");
+        }
+        return;
+    }
+
     HIST_ENTRY** list = history_list();
     if (!list) return;
 
