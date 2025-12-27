@@ -1,5 +1,3 @@
-#define _GNU_SOURCE
-
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -429,14 +427,30 @@ void initBuiltIn()
     exit(0);
   };
 
-  builtIns["history"] = [](const vector<string>&) {
+  builtIns["history"] = [](const vector<string>& args) {
     HIST_ENTRY** list = history_list();
     if (!list) return;
 
-    for (int i = 0; list[i]; ++i) {
+    int total = history_length;
+    int n = total;
+
+    // history <n>
+    if (args.size() == 2) {
+        try {
+            n = stoi(args[1]);
+            if (n < 0) n = 0;
+        } catch (...) {
+            return; // invalid argument → silently ignore (matches shell behavior)
+        }
+    }
+
+    int start = max(0, total - n);
+
+    for (int i = start; i < total; ++i) {
         cout << "    " << (i + 1) << "  " << list[i]->line << endl;
     }
   };
+
 
   builtIns["type"] = [](const vector<string>& args){
     if (args.size() < 2) return;
