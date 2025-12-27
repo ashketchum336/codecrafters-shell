@@ -424,6 +424,10 @@ void initBuiltIn()
   };
 
   builtIns["exit"] = [](const vector<string>&){
+    const char* histfile = getenv("HISTFILE");
+    if (histfile && *histfile) {
+        write_history(histfile);
+    }
     exit(0);
   };
 
