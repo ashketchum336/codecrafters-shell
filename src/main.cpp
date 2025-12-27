@@ -428,6 +428,8 @@ void initBuiltIn()
   };
 
   builtIns["history"] = [](const vector<string>& args) {
+    static int last_appended = 0;
+
     // history -r <file>
     if (args.size() == 3 && args[1] == "-r") {
         if (read_history(args[2].c_str()) != 0) {
@@ -440,6 +442,19 @@ void initBuiltIn()
     if (args.size() == 3 && args[1] == "-w") {
         if (write_history(args[2].c_str()) != 0) {
             perror("history");
+        }
+        last_appended = history_length;
+        return;
+    }
+
+    // history -a <file>
+    if (args.size() == 3 && args[1] == "-a") {
+        int to_append = history_length - last_appended;
+        if (to_append > 0) {
+            if (append_history(to_append, args[2].c_str()) != 0) {
+                perror("history");
+            }
+            last_appended = history_length;
         }
         return;
     }
