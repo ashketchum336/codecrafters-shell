@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -11,8 +13,8 @@
 #include <unistd.h>
 #include <limits.h>
 #include <fcntl.h>
-#include <readline/readline.h>
 #include <readline/history.h>
+#include <readline/readline.h>
 
 using namespace std;
 
@@ -425,6 +427,15 @@ void initBuiltIn()
 
   builtIns["exit"] = [](const vector<string>&){
     exit(0);
+  };
+
+  builtIns["history"] = [](const vector<string>&) {
+    HIST_ENTRY** list = history_list();
+    if (!list) return;
+
+    for (int i = 0; list[i]; ++i) {
+        cout << "    " << (i + 1) << "  " << list[i]->line << endl;
+    }
   };
 
   builtIns["type"] = [](const vector<string>& args){
