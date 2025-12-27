@@ -332,6 +332,30 @@ optional<Pipeline> parsePipeline(const string& input) {
   return p;
 }
 
+void execCommandInChild(const ParsedCommand& cmd) {
+  // Builtin
+  if (builtIns.count(cmd.name)) {
+    builtIns[cmd.name](cmd.args);
+    exit(0);
+  }
+
+  // External
+  auto path = findExecutablePath(cmd.name);
+  if (!path) {
+    cerr << cmd.name << ": command not found\n";
+    exit(1);
+  }
+
+  vector<char*> argv;
+  for (auto& a : cmd.args)
+    argv.push_back(const_cast<char*>(a.c_str()));
+  argv.push_back(nullptr);
+
+  execv(path->c_str(), argv.data());
+  perror("execv");
+  exit(1);
+}
+
 void runPipeline(const ParsedCommand& left, const ParsedCommand& right) {
   int pipefd[2];
   if (pipe(pipefd) < 0) {
@@ -348,20 +372,7 @@ void runPipeline(const ParsedCommand& left, const ParsedCommand& right) {
     close(pipefd[0]);
     close(pipefd[1]);
 
-    auto path = findExecutablePath(left.name);
-    if (!path) {
-      cerr << left.name << ": command not found\n";
-      exit(1);
-    }
-
-    vector<char*> argv;
-    for (auto& a : left.args)
-      argv.push_back(const_cast<char*>(a.c_str()));
-    argv.push_back(nullptr);
-
-    execv(path->c_str(), argv.data());
-    perror("execv");
-    exit(1);
+    execCommandInChild(left);
   }
 
   // RIGHT COMMAND
@@ -373,20 +384,7 @@ void runPipeline(const ParsedCommand& left, const ParsedCommand& right) {
     close(pipefd[1]);
     close(pipefd[0]);
 
-    auto path = findExecutablePath(right.name);
-    if (!path) {
-      cerr << right.name << ": command not found\n";
-      exit(1);
-    }
-
-    vector<char*> argv;
-    for (auto& a : right.args)
-      argv.push_back(const_cast<char*>(a.c_str()));
-    argv.push_back(nullptr);
-
-    execv(path->c_str(), argv.data());
-    perror("execv");
-    exit(1);
+    execCommandInChild(right);
   }
 
   // Parent
